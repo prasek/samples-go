@@ -1,6 +1,7 @@
 package options
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/workflow"
 )
 
 const (
@@ -18,6 +20,95 @@ const (
 	// metadataEncryptionKeyID identifies the key used to encrypt a payload
 	metadataEncryptionKeyID = "encryption-key-id"
 )
+
+type contextKey struct{}
+
+var DisableNexusEncryptionKey = contextKey{}
+
+// Extract extracts values from headers and puts them into context
+func WithDisableNexusEncryption(ctx context.Context, disableEncryption bool) (context.Context, error) {
+	return context.WithValue(ctx, DisableNexusEncryptionKey, disableEncryption), nil
+}
+
+// Extract extracts values from headers and puts them into context
+func WithWorkflowDisableNexusEncryption(ctx workflow.Context, disableEncryption bool) (workflow.Context, error) {
+	return workflow.WithValue(ctx, DisableNexusEncryptionKey, disableEncryption), nil
+}
+
+type DataConverter struct {
+	// Until EncodingDataConverter supports workflow.ContextAware we'll store parent here.
+	parent converter.DataConverter
+	converter.DataConverter
+	options DataConverterOptions
+}
+
+type DataConverterOptions struct {
+	EncryptionKeyID string
+	// Enable ZLib compression before encryption.
+	Compress bool
+}
+
+// NewEncryptionDataConverter creates a new instance of EncryptionDataConverter wrapping a DataConverter
+func NewEncryptionDataConverter(dataConverter converter.DataConverter, options DataConverterOptions) *DataConverter {
+	codecs := []converter.PayloadCodec{
+		&Codec{EncryptionKeyID: options.EncryptionKeyID},
+	}
+
+	// Enable compression if requested.
+	// Note that this must be done before encryption to provide any value. Encrypted data should by design not compress very well.
+	// This means the compression codec must come after the encryption codec here as codecs are applied last -> first.
+	if options.Compress {
+		codecs = append(codecs, converter.NewZlibCodec(converter.ZlibCodecOptions{AlwaysEncode: true}))
+	}
+
+	return &DataConverter{
+		parent:        dataConverter,
+		DataConverter: converter.NewCodecDataConverter(dataConverter, codecs...),
+		options:       options,
+	}
+}
+
+// TODO: Implement workflow.ContextAware in CodecDataConverter
+// Note that you only need to implement this function if you need to vary the encryption KeyID per workflow.
+func (dc *DataConverter) WithWorkflowContext(ctx workflow.Context) converter.DataConverter {
+	fmt.Printf("WithWorkflowContext ...\n")
+	if disableEncryption, ok := ctx.Value(DisableNexusEncryptionKey).(bool); ok && disableEncryption {
+		fmt.Printf("- disable encryption\n")
+		parent := dc.parent
+		if parentWithContext, ok := parent.(workflow.ContextAware); ok {
+			parent = parentWithContext.WithWorkflowContext(ctx)
+		}
+
+		return parent
+	}
+
+	//return encrypting dc by default
+	fmt.Printf("- enable encryption\n")
+	return dc
+}
+
+// TODO: Implement workflow.ContextAware in EncodingDataConverter
+// Note that you only need to implement this function if you need to vary the encryption KeyID per workflow.
+func (dc *DataConverter) WithContext(ctx context.Context) converter.DataConverter {
+	fmt.Printf("WithContext ...\n")
+	if disableEncryption, ok := ctx.Value(DisableNexusEncryptionKey).(bool); ok && disableEncryption {
+		fmt.Printf("- disable encryption\n")
+		parent := dc.parent
+		if parentWithContext, ok := parent.(workflow.ContextAware); ok {
+			parent = parentWithContext.WithContext(ctx)
+		}
+
+		return parent
+	}
+
+	//return encrypting dc by default
+	fmt.Printf("- enable encryption\n")
+	return dc
+}
+
+///========================
+/// Codec
+///========================
 
 // Codec provides methods for encrypting and decrypting payload data
 type Codec struct {
@@ -38,6 +129,7 @@ func (e *Codec) retrieveKey(keyID string) (key []byte, err error) {
 	return h[:], nil
 }
 
+/*
 // NewEncryptionDataConverter creates and returns a DataConverter instance that
 // wraps the default DataConverter with a CodecDataConverter that uses encryption
 // to protect the confidentiality of payload data. This instance will encrypt data
@@ -49,6 +141,7 @@ func NewEncryptionDataConverter(underlying converter.DataConverter, encryptionKe
 
 	return converter.NewCodecDataConverter(underlying, codecs...)
 }
+*/
 
 // Encode implements the Encode method defined by the converter.PayloadCodec interface
 func (e *Codec) Encode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error) {

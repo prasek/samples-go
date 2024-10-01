@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/temporalio/samples-go/nexus/options"
 	"github.com/temporalio/samples-go/nexus/service"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -23,7 +24,8 @@ func NullCallerWorkflow(ctx workflow.Context, nexusOp string) (string, error) {
 
 	c := workflow.NewNexusClient(endpointName, service.HelloServiceName)
 
-	fut := c.ExecuteOperation(ctx, nexusOp, nexus.NoValue(nil), workflow.NexusOperationOptions{})
+	nCtx, _ := options.WithWorkflowDisableNexusEncryption(ctx, true)
+	fut := c.ExecuteOperation(nCtx, nexusOp, nexus.NoValue(nil), workflow.NexusOperationOptions{})
 
 	var res nexus.NoValue
 	if err := fut.Get(ctx, &res); err != nil {
@@ -49,7 +51,8 @@ func EchoCallerWorkflow(ctx workflow.Context, message string) (string, error) {
 
 	c := workflow.NewNexusClient(endpointName, service.HelloServiceName)
 
-	fut := c.ExecuteOperation(ctx, service.EchoOperationName, service.EchoInput{Message: message}, workflow.NexusOperationOptions{})
+	nCtx, _ := options.WithWorkflowDisableNexusEncryption(ctx, true)
+	fut := c.ExecuteOperation(nCtx, service.EchoOperationName, service.EchoInput{Message: message}, workflow.NexusOperationOptions{})
 
 	var res service.EchoOutput
 	if err := fut.Get(ctx, &res); err != nil {
@@ -70,7 +73,8 @@ func HelloCallerWorkflow(ctx workflow.Context, name string, language service.Lan
 	logger := workflow.GetLogger(ctx)
 	c := workflow.NewNexusClient(endpointName, service.HelloServiceName)
 
-	fut := c.ExecuteOperation(ctx, service.HelloOperationName, service.HelloInput{Name: name, Language: language}, workflow.NexusOperationOptions{})
+	nCtx, _ := options.WithWorkflowDisableNexusEncryption(ctx, true)
+	fut := c.ExecuteOperation(nCtx, service.HelloOperationName, service.HelloInput{Name: name, Language: language}, workflow.NexusOperationOptions{})
 	var res service.HelloOutput
 
 	// Optionally wait for the operation to be started. NexusOperationExecution will contain the operation ID in
@@ -128,7 +132,8 @@ func HelloCallerWorkflow2(ctx workflow.Context, name string, language service.La
 	logger := workflow.GetLogger(ctx)
 	c := workflow.NewNexusClient(endpointName, service.HelloServiceName)
 
-	fut := c.ExecuteOperation(ctx, service.HelloOperation2Name, service.HelloInput{Name: name, Language: language}, workflow.NexusOperationOptions{})
+	nCtx, _ := options.WithWorkflowDisableNexusEncryption(ctx, true)
+	fut := c.ExecuteOperation(nCtx, service.HelloOperation2Name, service.HelloInput{Name: name, Language: language}, workflow.NexusOperationOptions{})
 	var res service.HelloOutput
 
 	if err := fut.Get(ctx, &res); err != nil {

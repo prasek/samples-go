@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 )
 
 // ParseClientOptionFlags parses the given arguments into client options. In
@@ -69,7 +70,9 @@ func ParseClientOptionFlags(args []string, encryptionKey string) (client.Options
 		HostPort:          *targetHost,
 		Namespace:         *namespace,
 		ConnectionOptions: connectionOptions,
-		//DataConverter:     NewEncryptionDataConverter(converter.GetDefaultDataConverter(), encryptionKey),
+		DataConverter: NewEncryptionDataConverter(
+			converter.GetDefaultDataConverter(),
+			DataConverterOptions{EncryptionKeyID: encryptionKey}),
 		//DataConverter: NewEncryptionDataConverter(GetMyDataConverter(), encryptionKey),
 	}, nil
 }
