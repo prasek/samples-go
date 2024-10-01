@@ -19,7 +19,7 @@ const (
 
 func main() {
 	// The client and worker are heavyweight objects that should be created once per process.
-	clientOptions, err := options.ParseClientOptionFlags(os.Args[1:])
+	clientOptions, err := options.ParseClientOptionFlags(os.Args[1:], "bar123")
 	if err != nil {
 		log.Fatalf("Invalid arguments: %v", err)
 	}
@@ -31,12 +31,16 @@ func main() {
 
 	w := worker.New(c, taskQueue, worker.Options{})
 	service := nexus.NewService(service.HelloServiceName)
-	err = service.Register(handler.EchoOperation, handler.HelloOperation)
+	err = service.Register(
+		handler.NullPingPongOperation,
+		handler.EchoOperation,
+		handler.HelloOperation)
 	if err != nil {
 		log.Fatalln("Unable to register operations", err)
 	}
 	w.RegisterNexusService(service)
 	w.RegisterWorkflow(handler.HelloHandlerWorkflow)
+	w.RegisterActivity(handler.HelloActivity)
 
 	err = w.Run(worker.InterruptCh())
 	if err != nil {

@@ -13,7 +13,7 @@ import (
 
 func main() {
 	// The client and worker are heavyweight objects that should be created once per process.
-	clientOptions, err := options.ParseClientOptionFlags(os.Args[1:])
+	clientOptions, err := options.ParseClientOptionFlags(os.Args[1:], "key123")
 	if err != nil {
 		log.Fatalf("Invalid arguments: %v", err)
 	}
@@ -25,6 +25,7 @@ func main() {
 
 	w := worker.New(c, caller.TaskQueue, worker.Options{})
 
+	w.RegisterWorkflow(caller.NullPingPongWorkflow)
 	w.RegisterWorkflow(caller.EchoCallerWorkflow)
 	w.RegisterWorkflow(caller.HelloCallerWorkflow)
 

@@ -2,6 +2,9 @@ package service
 
 const HelloServiceName = "my-hello-service"
 
+// NullPingPong operation
+const NullPingPong = "nullPingPong"
+
 // Echo operation
 const EchoOperationName = "echo"
 

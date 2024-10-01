@@ -14,7 +14,7 @@ import (
 // ParseClientOptionFlags parses the given arguments into client options. In
 // some cases a failure will be returned as an error, in others the process may
 // exit with help info.
-func ParseClientOptionFlags(args []string) (client.Options, error) {
+func ParseClientOptionFlags(args []string, encryptionKey string) (client.Options, error) {
 	// Parse args
 	set := flag.NewFlagSet("nexus-sample", flag.ExitOnError)
 	targetHost := set.String("target-host", "localhost:7233", "Host:port for the Temporal service")
@@ -69,5 +69,7 @@ func ParseClientOptionFlags(args []string) (client.Options, error) {
 		HostPort:          *targetHost,
 		Namespace:         *namespace,
 		ConnectionOptions: connectionOptions,
+		//DataConverter:     NewEncryptionDataConverter(converter.GetDefaultDataConverter(), encryptionKey),
+		DataConverter: NewEncryptionDataConverter(GetMyDataConverter(), encryptionKey),
 	}, nil
 }
