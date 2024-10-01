@@ -25,7 +25,9 @@ func main() {
 	defer c.Close()
 	runWorkflow(c, caller.EchoCallerWorkflow, "Nexus Echo 👋")
 	runWorkflow(c, caller.HelloCallerWorkflow, "Nexus", service.ES)
-	runWorkflow(c, caller.NullPingPongWorkflow, nil)
+	runWorkflow(c, caller.HelloCallerWorkflow2, "Nexus", service.ES)
+	runWorkflow(c, caller.NullCallerWorkflow, service.NullSyncOp)
+	runWorkflow(c, caller.NullCallerWorkflow, service.NullAsyncOp)
 }
 
 func runWorkflow(c client.Client, workflow interface{}, args ...interface{}) {

@@ -2,8 +2,8 @@ package service
 
 const HelloServiceName = "my-hello-service"
 
-// NullPingPong operation
-const NullPingPong = "nullPingPong"
+const NullSyncOp = "nullSyncOp"
+const NullAsyncOp = "nullAsyncOp"
 
 // Echo operation
 const EchoOperationName = "echo"
@@ -16,6 +16,7 @@ type EchoOutput EchoInput
 
 // Hello operation
 const HelloOperationName = "say-hello"
+const HelloOperation2Name = "say-hello-2"
 
 type Language string
 

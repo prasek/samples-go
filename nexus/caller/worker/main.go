@@ -25,9 +25,10 @@ func main() {
 
 	w := worker.New(c, caller.TaskQueue, worker.Options{})
 
-	w.RegisterWorkflow(caller.NullPingPongWorkflow)
+	w.RegisterWorkflow(caller.NullCallerWorkflow)
 	w.RegisterWorkflow(caller.EchoCallerWorkflow)
 	w.RegisterWorkflow(caller.HelloCallerWorkflow)
+	w.RegisterWorkflow(caller.HelloCallerWorkflow2)
 
 	err = w.Run(worker.InterruptCh())
 	if err != nil {

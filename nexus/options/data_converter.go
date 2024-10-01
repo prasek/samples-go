@@ -12,100 +12,6 @@ import (
 	"go.temporal.io/sdk/converter"
 )
 
-/*
-
-const (
-	// MetadataEncodingEncrypted is "binary/encrypted"
-	MetadataEncodingEncrypted = "binary/encrypted"
-
-	// MetadataEncryptionKeyID is "encryption-key-id"
-	MetadataEncryptionKeyID = "encryption-key-id"
-)
-
-type DataConverter struct {
-	// Until EncodingDataConverter supports workflow.ContextAware we'll store parent here.
-	parent converter.DataConverter
-	converter.DataConverter
-	options DataConverterOptions
-}
-
-type DataConverterOptions struct {
-	KeyID string
-	// Enable ZLib compression before encryption.
-	Compress bool
-}
-
-// Codec implements PayloadCodec using AES Crypt.
-type Codec struct {
-	KeyID string
-}
-
-// TODO: Implement workflow.ContextAware in CodecDataConverter
-// Note that you only need to implement this function if you need to vary the encryption KeyID per workflow.
-func (dc *DataConverter) WithWorkflowContext(ctx workflow.Context) converter.DataConverter {
-	if val, ok := ctx.Value(PropagateKey).(CryptContext); ok {
-		parent := dc.parent
-		if parentWithContext, ok := parent.(workflow.ContextAware); ok {
-			parent = parentWithContext.WithWorkflowContext(ctx)
-		}
-
-		options := dc.options
-		options.KeyID = val.KeyID
-
-		return NewEncryptionDataConverter(parent, options)
-	}
-
-	return dc
-}
-
-// TODO: Implement workflow.ContextAware in EncodingDataConverter
-// Note that you only need to implement this function if you need to vary the encryption KeyID per workflow.
-func (dc *DataConverter) WithContext(ctx context.Context) converter.DataConverter {
-	if val, ok := ctx.Value(PropagateKey).(CryptContext); ok {
-		parent := dc.parent
-		if parentWithContext, ok := parent.(workflow.ContextAware); ok {
-			parent = parentWithContext.WithContext(ctx)
-		}
-
-		options := dc.options
-		options.KeyID = val.KeyID
-
-		return NewEncryptionDataConverter(parent, options)
-	}
-
-	return dc
-}
-
-func (e *Codec) getKey(keyID string) (key []byte) {
-	// Key must be fetched from secure storage in production (such as a KMS).
-	// For testing here we just hard code a key.
-	return []byte("test-key-test-key-test-key-test!")
-}
-
-// NewEncryptionDataConverter creates a new instance of EncryptionDataConverter wrapping a DataConverter
-func NewEncryptionDataConverter(dataConverter converter.DataConverter, options DataConverterOptions) *DataConverter {
-	codecs := []converter.PayloadCodec{
-		&Codec{KeyID: options.KeyID},
-	}
-	// Enable compression if requested.
-	// Note that this must be done before encryption to provide any value. Encrypted data should by design not compress very well.
-	// This means the compression codec must come after the encryption codec here as codecs are applied last -> first.
-	if options.Compress {
-		codecs = append(codecs, converter.NewZlibCodec(converter.ZlibCodecOptions{AlwaysEncode: true}))
-	}
-
-	return &DataConverter{
-		parent:        dataConverter,
-		DataConverter: converter.NewCodecDataConverter(dataConverter, codecs...),
-		options:       options,
-	}
-}
-*/
-
-//TODO: Merge above WithWorkflowContext WithContext for ContextAware support specifically for Nexus contexts
-//      so we can no encrypt select Nexus payloads
-//      alternatively or additively we can choose to not encrypt only nexus.NoValue == nil (which is what we do below)
-
 const (
 	// metadataEncodingEncrypted identifies payloads encoded with an encrypted binary format
 	metadataEncodingEncrypted = "binary/encrypted"
@@ -149,13 +55,14 @@ func (e *Codec) Encode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 	result := make([]*commonpb.Payload, len(payloads))
 	for i, payload := range payloads {
 
-		fmt.Printf("Encode Payload.Data: len(%d) %#v\n", len(payload.Data), payload.Data)
+		//fmt.Printf("Encode Payload.Data: len(%d) %#v\n", len(payload.Data), payload.Data)
 
 		payloadFormatID := string(payload.Metadata[converter.MetadataEncoding])
-		fmt.Printf("Encode Payload.Encoding: len(%d) %#v\n", len(payloadFormatID), payloadFormatID)
+		fmt.Printf("Encode payload: len(%d) %#v\n", len(payload.Data), payloadFormatID)
 
 		// don't encrypt nexus no value if not using same KMS keyID or passing key ID in payload metadata
 		if payloadFormatID == MetadataEncodingNexusNoValue {
+			fmt.Printf("- skipped encryption for payload: len(%d) %#v\n", len(payload.Data), payloadFormatID)
 			result[i] = payload
 			continue
 		}
@@ -166,7 +73,7 @@ func (e *Codec) Encode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 			return payloads, err
 		}
 
-		fmt.Printf("Encode Unencrypted Data: len(%d) %#v\n", len(unencryptedData), unencryptedData)
+		//fmt.Printf("Encode Unencrypted Data: len(%d) %#v\n", len(unencryptedData), unencryptedData)
 
 		key, err := e.retrieveKey(e.EncryptionKeyID)
 		if err != nil {
@@ -178,7 +85,7 @@ func (e *Codec) Encode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 			return payloads, err
 		}
 
-		fmt.Printf("Encode Encrypted Data: len(%d) %#v\n", len(encryptedData), encryptedData)
+		//fmt.Printf("Encode Encrypted Data: len(%d) %#v\n", len(encryptedData), encryptedData)
 
 		result[i] = &commonpb.Payload{
 			Metadata: map[string][]byte{
@@ -188,7 +95,7 @@ func (e *Codec) Encode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 			Data: encryptedData,
 		}
 
-		fmt.Printf("Encoded EncryptionKeyID (on wire): %#v\n", string(result[i].Metadata[metadataEncryptionKeyID]))
+		fmt.Printf("- encrypted with keyID: %#v\n", string(result[i].Metadata[metadataEncryptionKeyID]))
 	}
 
 	return result, nil
@@ -199,16 +106,18 @@ func (e *Codec) Decode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 	result := make([]*commonpb.Payload, len(payloads))
 	for i, payload := range payloads {
 		payloadFormatID := string(payload.Metadata[converter.MetadataEncoding])
-		fmt.Printf("Decode Payload.Encoding: len(%d) %#v\n", len(payloadFormatID), payloadFormatID)
+
+		//fmt.Printf("Decode Payload.Encoding: len(%d) %#v\n", len(payload.Data), payloadFormatID)
 
 		// Skip decryption for any payload not using our encrypted format
 		if payloadFormatID != metadataEncodingEncrypted {
+			fmt.Printf("Decode decryption skipped for payload: len(%d) %#v\n", len(payload.Data), payloadFormatID)
 			result[i] = payload
 			continue
 		}
 
 		encryptedData := payload.Data
-		fmt.Printf("Decode encryptedData: len(%d) %#v\n", len(encryptedData), encryptedData)
+		//fmt.Printf("Decode encryptedData: len(%d) %#v\n", len(encryptedData), encryptedData)
 
 		/*
 			//don't use key sent on wire, only use my key to simulate separate keys per ns/region
@@ -220,7 +129,7 @@ func (e *Codec) Decode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 		if !ok {
 			return payloads, fmt.Errorf("encryption key id missing from metadata")
 		}
-		fmt.Printf("Recieved EncryptionKeyID (on wire): %#v\n", string(keyID))
+		fmt.Printf("Decode payload with keyID passed in payload metadata: %#v\n", string(keyID))
 		key, err := e.retrieveKey(string(keyID))
 		if err != nil {
 			return payloads, err
@@ -231,7 +140,7 @@ func (e *Codec) Decode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 			return payloads, err
 		}
 
-		fmt.Printf("Decode decryptedData: len(%d) %#v\n", len(decryptedData), decryptedData)
+		//fmt.Printf("Decode decryptedData: len(%d) %#v\n", len(decryptedData), decryptedData)
 
 		result[i] = &commonpb.Payload{}
 		err = result[i].Unmarshal(decryptedData)
@@ -239,7 +148,9 @@ func (e *Codec) Decode(payloads []*commonpb.Payload) ([]*commonpb.Payload, error
 			fmt.Printf("Unmarshal Error: %#v\n", err)
 			return payloads, err
 		}
-		fmt.Printf("Decode Payload.Data: len(%d) %#v\n", len(result[i].Data), result[i].Data)
+		payloadFormatID = string(result[i].Metadata[converter.MetadataEncoding])
+		fmt.Printf("- decrypted payload: len(%d) %#v\n", len(result[i].Data), payloadFormatID)
+		//fmt.Printf("Decode Payload.Data: len(%d) %#v\n", len(result[i].Data), result[i].Data)
 	}
 
 	return result, nil
@@ -282,21 +193,3 @@ func decrypt(data []byte, key []byte) ([]byte, error) {
 	nonce, encrypted := data[:nonceSize], data[nonceSize:]
 	return aesgcm.Open(nil, nonce, encrypted, nil)
 }
-
-/*
-
-func isInterfaceNil(i interface{}) bool {
-	if nexusNoValue, ok := i.(nexus.NoValue); ok {
-		nexusNoValueIsNil := nexusNoValue == nil
-		fmt.Printf("nexusNoValueIsNil %#v\n", nexusNoValueIsNil)
-		return nexusNoValueIsNil
-	}
-	fmt.Println("isInterfaceNil: FALSE")
-	return false
-
-	fmt.Printf("isInterfaceNil %#v\n", i)
-	v := reflect.ValueOf(i)
-	return i == nil || ((v.Kind() == reflect.Ptr || v.Kind() == reflect.Slice) && v.IsNil())
-}
-
-*/

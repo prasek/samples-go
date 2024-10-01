@@ -70,6 +70,6 @@ func ParseClientOptionFlags(args []string, encryptionKey string) (client.Options
 		Namespace:         *namespace,
 		ConnectionOptions: connectionOptions,
 		//DataConverter:     NewEncryptionDataConverter(converter.GetDefaultDataConverter(), encryptionKey),
-		DataConverter: NewEncryptionDataConverter(GetMyDataConverter(), encryptionKey),
+		//DataConverter: NewEncryptionDataConverter(GetMyDataConverter(), encryptionKey),
 	}, nil
 }

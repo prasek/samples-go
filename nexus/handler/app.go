@@ -14,47 +14,60 @@ import (
 	"github.com/temporalio/samples-go/nexus/service"
 )
 
-var NullPingPongOperation = temporalnexus.NewSyncOperation(service.NullPingPong, func(ctx context.Context, c client.Client, input nexus.NoValue, options nexus.StartOperationOptions) (nexus.NoValue, error) {
-	logger := temporalnexus.GetLogger(ctx)
-	logger.Info("NullPingPong operation")
+var NullSyncOp = temporalnexus.NewSyncOperation(
+	service.NullSyncOp,
+	func(ctx context.Context, c client.Client, input nexus.NoValue, options nexus.StartOperationOptions) (nexus.NoValue, error) {
+		logger := temporalnexus.GetLogger(ctx)
+		logger.Info("NullSyncOp start ...")
+		return nil, nil
+	})
+
+var NullAsyncOp = temporalnexus.NewWorkflowRunOperation(
+	service.NullAsyncOp,
+	NullWorkflow,
+	func(ctx context.Context, input nexus.NoValue, options nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+		logger := temporalnexus.GetLogger(ctx)
+		logger.Info("NullAsyncOp start ...")
+		return client.StartWorkflowOptions{
+			// Workflow IDs should typically be business meaningful IDs and are used to dedupe workflow starts.
+			// For this example, we're using the request ID allocated by Temporal when the caller workflow schedules
+			// the operation, this ID is guaranteed to be stable across retries of this operation.
+			ID: options.RequestID,
+			// Task queue defaults to the task queue this operation is handled on.
+		}, nil
+	})
+
+func NullWorkflow(ctx workflow.Context, input nexus.NoValue) (nexus.NoValue, error) {
+	ctx = workflow.WithActivityOptions(ctx,
+		workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+		},
+	)
+
+	var result string
+
+	err := workflow.ExecuteActivity(ctx,
+		HelloActivity,
+		"test 123: activity",
+	).Get(ctx, &result)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return nil, nil
-})
+
+}
 
 // NewSyncOperation is a meant for exposing simple RPC handlers.
 var EchoOperation = temporalnexus.NewSyncOperation(service.EchoOperationName, func(ctx context.Context, c client.Client, input service.EchoInput, options nexus.StartOperationOptions) (service.EchoOutput, error) {
 	time.Sleep(1 * time.Second)
-	// The method is provided with an SDK client that can be used for arbitrary calls such as signaling, querying,
-	// and listing workflows but implementations are free to make arbitrary calls to other services or databases, or
-	// perform simple computations such as this one.
-
-	//return service.EchoOutput(input), nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "test 123: bad request")
-
-	/*
-		return service.EchoOutput(input), fmt.Errorf("custom error")
-
-		return service.EchoOutput(input), &nexus.UnsuccessfulOperationError{
-			State: nexus.OperationStateFailed,
-			Failure: nexus.Failure{
-				Message: "test UnsuccessfulOperationError",
-			},
-		}
-	*/
-
 	return service.EchoOutput(input), nil
-
-	/*
-		return service.EchoOutput(input),
-			temporal.NewApplicationError("test 123: sync op error", "my error type")
-
-
-	*/
-
 })
 
-/*
 // Use the NewWorkflowRunOperation constructor, which is the easiest way to expose a workflow as an operation.
 // See alternatives at https://pkg.go.dev/go.temporal.io/sdk/temporalnexus.
-var HelloOperation = temporalnexus.NewWorkflowRunOperation(service.HelloOperationName, HelloHandlerWorkflow, func(ctx context.Context, input service.HelloInput, options nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+var HelloOperation2 = temporalnexus.NewWorkflowRunOperation(service.HelloOperation2Name, HelloHandlerWorkflow, func(ctx context.Context, input service.HelloInput, options nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
 	return client.StartWorkflowOptions{
 		// Workflow IDs should typically be business meaningful IDs and are used to dedupe workflow starts.
 		// For this example, we're using the request ID allocated by Temporal when the caller workflow schedules
@@ -63,11 +76,13 @@ var HelloOperation = temporalnexus.NewWorkflowRunOperation(service.HelloOperatio
 		// Task queue defaults to the task queue this operation is handled on.
 	}, nil
 })
-*/
 
 var HelloOperation, _ = temporalnexus.NewWorkflowRunOperationWithOptions(temporalnexus.WorkflowRunOperationOptions[service.HelloInput, *service.HelloOutput]{
 	Name: service.HelloOperationName,
 	Handler: func(ctx context.Context, input service.HelloInput, options nexus.StartOperationOptions) (temporalnexus.WorkflowHandle[*service.HelloOutput], error) {
+		logger := temporalnexus.GetLogger(ctx)
+		logger.Info("HelloOperation start ...")
+
 		wfOpts := client.StartWorkflowOptions{
 			// Workflow IDs should typically be business meaningful IDs and are used to dedupe workflow starts.
 			// For this example, we're using the request ID allocated by Temporal when the caller workflow schedules
@@ -75,13 +90,6 @@ var HelloOperation, _ = temporalnexus.NewWorkflowRunOperationWithOptions(tempora
 			ID: options.RequestID,
 			// Task queue defaults to the task queue this operation is handled on.
 		}
-
-		/*
-			return nil, &serviceerror.NamespaceNotFound{
-				Message:   "test 123",
-				Namespace: "foo",
-			}
-		*/
 
 		handle, err := temporalnexus.ExecuteWorkflow(ctx, options, wfOpts, HelloHandlerWorkflow, input)
 		if err != nil {
@@ -91,15 +99,6 @@ var HelloOperation, _ = temporalnexus.NewWorkflowRunOperationWithOptions(tempora
 	}})
 
 func HelloHandlerWorkflow(ctx workflow.Context, input service.HelloInput) (service.HelloOutput, error) {
-	/*
-			return service.HelloOutput{},
-				fmt.Errorf("test 123: wf any error", "my error type")
-
-		return service.HelloOutput{},
-			temporal.NewApplicationError("test 123: wf error", "my error type")
-
-	*/
-
 	ctx = workflow.WithActivityOptions(ctx,
 		workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
@@ -135,10 +134,5 @@ func HelloHandlerWorkflow(ctx workflow.Context, input service.HelloInput) (servi
 }
 
 func HelloActivity(ctx context.Context, msg string) (string, error) {
-	//time.Sleep(1 * time.Hour)
-	//return "", fmt.Errorf("other activity error")
-
-	//return "", temporal.NewNonRetryableApplicationError("activity error: test 123", "activity_error_type", fmt.Errorf("other internal error"))
-
 	return msg + " OK", nil
 }
