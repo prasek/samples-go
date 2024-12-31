@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/temporalio/samples-go/ctxpropagation"
 	"github.com/temporalio/samples-go/nexus/service"
 )
 
@@ -24,7 +25,9 @@ var EchoOperation = temporalnexus.NewSyncOperation(service.EchoOperationName, fu
 
 // Use the NewWorkflowRunOperation constructor, which is the easiest way to expose a workflow as an operation.
 // See alternatives at https://pkg.go.dev/go.temporal.io/sdk/temporalnexus.
+/*
 var HelloOperation = temporalnexus.NewWorkflowRunOperation(service.HelloOperationName, HelloHandlerWorkflow, func(ctx context.Context, input service.HelloInput, options nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+	fmt.Printf("header[test]=%s\n", options.Header.Get("test"))
 	return client.StartWorkflowOptions{
 		// Workflow IDs should typically be business meaningful IDs and are used to dedupe workflow starts.
 		// For this example, we're using the request ID allocated by Temporal when the caller workflow schedules
@@ -33,8 +36,33 @@ var HelloOperation = temporalnexus.NewWorkflowRunOperation(service.HelloOperatio
 		// Task queue defaults to the task queue this operation is handled on.
 	}, nil
 })
+*/
 
-func HelloHandlerWorkflow(_ workflow.Context, input service.HelloInput) (service.HelloOutput, error) {
+var HelloOperation, _ = temporalnexus.NewWorkflowRunOperationWithOptions(temporalnexus.WorkflowRunOperationOptions[service.HelloInput, *service.HelloOutput]{
+	Name: service.HelloOperationName,
+	Handler: func(ctx context.Context, hi service.HelloInput, soo nexus.StartOperationOptions) (temporalnexus.WorkflowHandle[*service.HelloOutput], error) {
+
+		temporalnexus.GetLogger(ctx).Info("custom header propagated from caller to Nexus handler", "nexus-test-header", soo.Header.Get("nexus-test-header"))
+
+		ctx = context.WithValue(ctx, ctxpropagation.PropagateKey, &ctxpropagation.Values{Key: "nexus-test-header", Value: soo.Header.Get("nexus-test-header")})
+
+		wfOpts := client.StartWorkflowOptions{
+			ID: soo.RequestID,
+		}
+
+		handle, err := temporalnexus.ExecuteWorkflow(ctx, soo, wfOpts, HelloHandlerWorkflow, hi)
+		if err != nil {
+			return nil, err
+		}
+		return handle, nil
+	},
+})
+
+func HelloHandlerWorkflow(ctx workflow.Context, input service.HelloInput) (service.HelloOutput, error) {
+	if val := ctx.Value(ctxpropagation.PropagateKey); val != nil {
+		vals := val.(ctxpropagation.Values)
+		workflow.GetLogger(ctx).Info("custom context propagated to workflow", vals.Key, vals.Value)
+	}
 	switch input.Language {
 	case service.EN:
 		return service.HelloOutput{Message: "Hello " + input.Name + " 👋"}, nil
@@ -49,4 +77,5 @@ func HelloHandlerWorkflow(_ workflow.Context, input service.HelloInput) (service
 	}
 	return service.HelloOutput{}, fmt.Errorf("unsupported language %q", input.Language)
 }
+
 // @@@SNIPEND
