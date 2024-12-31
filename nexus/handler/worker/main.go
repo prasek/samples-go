@@ -7,8 +7,10 @@ import (
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/temporalio/samples-go/ctxpropagation"
 	"github.com/temporalio/samples-go/nexus/handler"
 	"github.com/temporalio/samples-go/nexus/options"
 	"github.com/temporalio/samples-go/nexus/service"
@@ -24,6 +26,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Invalid arguments: %v", err)
 	}
+	clientOptions.ContextPropagators = []workflow.ContextPropagator{ctxpropagation.NewContextPropagator()}
+
 	c, err := client.Dial(clientOptions)
 	if err != nil {
 		log.Fatalln("Unable to create client", err)
@@ -44,4 +48,5 @@ func main() {
 		log.Fatalln("Unable to start worker", err)
 	}
 }
+
 // @@@SNIPEND

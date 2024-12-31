@@ -9,6 +9,7 @@ import (
 	"github.com/temporalio/samples-go/nexus/options"
 
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -24,7 +25,11 @@ func main() {
 	}
 	defer c.Close()
 
-	w := worker.New(c, caller.TaskQueue, worker.Options{})
+	w := worker.New(c, caller.TaskQueue, worker.Options{
+		Interceptors: []interceptor.WorkerInterceptor{
+			&nexusInterceptor{},
+		},
+	})
 
 	w.RegisterWorkflow(caller.EchoCallerWorkflow)
 	w.RegisterWorkflow(caller.HelloCallerWorkflow)
@@ -34,4 +39,5 @@ func main() {
 		log.Fatalln("Unable to start worker", err)
 	}
 }
+
 // @@@SNIPEND
